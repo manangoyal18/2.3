@@ -1,0 +1,16 @@
+{application, tic_tac_toe,
+ [{description, "Tic Tac Toe Server"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {tic_tac_toe_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    cowboy
+   ]},
+  {env, []},
+  {modules, []},
+
+  {licenses, ["Apache-2.0"]},
+  {links, []}
+ ]}.
