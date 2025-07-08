@@ -138,7 +138,7 @@ valid_move(Player, Row, Col, State) when Row >= 0, Row =< 2, Col >= 0, Col =< 2 
         State#state.status =/= <<"ongoing">> ->
             {false, <<"Game is over">>};
         true ->
-            case lists:nth(Row+1, lists:nth(Col+1, State#state.board)) of
+            case lists:nth(Col+1, lists:nth(Row+1, State#state.board)) of
                 <<"">> -> true;
                 _ -> {false, <<"Cell already taken">>}
             end
