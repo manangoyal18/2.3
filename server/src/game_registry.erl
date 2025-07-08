@@ -17,12 +17,13 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    ets:new(?TABLE, [named_table, public, set]),
+    ets:new(game_registry, [named_table, public, set, {keypos, 1}]),
+    %ets:new(?TABLE, [named_table, public, set]),
     {ok, #{}}.
 
 %% Register game by ID
 register_game(GameId, Pid) ->
-    ets:insert(?TABLE, {GameId, Pid}),
+    ets:insert(game_registry, {GameId, Pid}),
     ok.
 
 %% Lookup
@@ -32,12 +33,12 @@ register_game(GameId, Pid) ->
 %        [] -> {error, not_found}
 %    end.
 
-get_game_pid(GameId) when is_list(GameId) ->
-    case ets:lookup(?TABLE, GameId) of
-        [{_, Pid}] when is_pid(Pid) -> {ok, Pid};
-        _ -> {error, not_found}
-    end;
-get_game_pid(_) -> {error, invalid_game_id}.
+get_game_pid(GameId) ->
+    case ets:lookup(game_registry, GameId) of
+        [{_, Pid}] -> {ok, Pid};
+        [] -> {error, not_found}
+    end.
+%get_game_pid(_) -> {error, invalid_game_id}.
 
 %% Unregister
 unregister_game(GameId) ->

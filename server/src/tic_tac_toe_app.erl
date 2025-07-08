@@ -12,6 +12,10 @@ start(_StartType, _StartArgs) ->
         [{port, 8088}],
         #{env => #{dispatch => Dispatch}}
     ),
+
+    %ets:new(game_registry, [named_table, public, set, {keypos, 1}]).
+
+
     tic_tac_toe_sup:start_link().
 
 stop(_State) ->

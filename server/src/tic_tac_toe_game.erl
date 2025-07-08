@@ -13,11 +13,11 @@
 
 %% Public API
 start() ->
-    {ok, Pid} = gen_server:start(?MODULE, [], []),
-    GameIdStr = erlang:pid_to_list(Pid),
-    ok = game_registry:register_game(GameIdStr, Pid),
-    %{ok, erlang:pid_to_list(Pid)}.
-    {ok, GameIdStr}.
+    {ok, Pid} = gen_server:start(?MODULE, [], []).
+   %GameIdStr = erlang:pid_to_list(Pid),
+   %ok = game_registry:register_game(GameIdStr, Pid),
+   %%{ok, erlang:pid_to_list(Pid)}.
+   %{ok, GameIdStr}.
 
 %make_move(GameId, Player, #{<<"row">> := Row, <<"col">> := Col}) ->
 %    gen_server:call(list_to_pid(GameId), {make_move, Player, Row, Col}).
@@ -42,8 +42,13 @@ get_state(GameIdStr) when is_list(GameIdStr) ->
         Error -> Error
     end.
 
-reset(GameId) ->
-    gen_server:call(list_to_pid(GameId), reset).
+reset(GameId) when is_pid(GameId)->
+    gen_server:call(GameId, reset);
+reset(GameIdStr) when is_list(GameIdStr) ->
+    case game_registry:get_game_pid(GameIdStr) of
+        {ok, Pid} -> gen_server:call(Pid, reset);
+        Error -> Error
+    end.
 
 %% gen_server callbacks
 init([]) ->
@@ -53,10 +58,11 @@ init([]) ->
     {ok, #state{
         board = InitialBoard,
         current_player = <<"x">>,
-        status = <<"ongoing">>
+        status = <<"ongoing">>,
+        winner = undefined
     }}.
 
-handle_call({make_move, Player, Row, Col}, _From, State) ->
+handle_call({make_move, Player, #{row := Row, col := Col}}, _From, State) ->
     try
         case valid_move(Player, Row, Col, State) of
             true ->
@@ -65,29 +71,29 @@ handle_call({make_move, Player, Row, Col}, _From, State) ->
                     board = NewBoard,
                     current_player = switch_player(Player)
                 }),
-                Response = #{
-                    <<"type">> => <<"game_state">>,
-                    <<"board">> => NewState#state.board,
-                    <<"turn">> => NewState#state.current_player,
-                    <<"status">> => NewState#state.status
-                },
-                {reply, {ok, Response}, NewState};
+                %Response = #{
+                %    <<"type">> => <<"game_state">>,
+                %    <<"board">> => NewState#state.board,
+                %    <<"turn">> => NewState#state.current_player,
+                %    <<"status">> => NewState#state.status
+                %},
+                {reply, {ok, NewState}, NewState};
             {false, Reason} ->
-                {reply, {error, #{<<"error">> => Reason}}, State}
+                {reply, {error, Reason}, State}
         end
     catch
         _:_ ->
-            {reply, {error, #{<<"error">> => <<"Invalid move">>}}, State}
+            {reply, {error, <<"Invalid move">>}, State}
     end;
 
 handle_call(get_state, _From, State) ->
-    Response = #{
-        <<"type">> => <<"game_state">>,
-        <<"board">> => State#state.board,
-        <<"turn">> => State#state.current_player,
-        <<"status">> => State#state.status
-    },
-    {reply, {ok, Response}, State};
+    %Response = #{
+    %    <<"type">> => <<"game_state">>,
+    %    <<"board">> => State#state.board,
+    %    <<"turn">> => State#state.current_player,
+    %    <<"status">> => State#state.status
+    %},
+    {reply, {ok, State}, State};
 
 handle_call(reset, _From, _State) ->
     InitialBoard = [[<<"">>, <<"">>, <<"">>], 
@@ -96,15 +102,16 @@ handle_call(reset, _From, _State) ->
     NewState = #state{
         board = InitialBoard,
         current_player = <<"x">>,
-        status = <<"ongoing">>
+        status = <<"ongoing">>,
+        winner = undefined
     },
-    Response = #{
-        <<"type">> => <<"game_state">>,
-        <<"board">> => NewState#state.board,
-        <<"turn">> => NewState#state.current_player,
-        <<"status">> => NewState#state.status
-    },
-    {reply, {ok, Response}, NewState};
+   %Response = #{
+   %    <<"type">> => <<"game_state">>,
+   %    <<"board">> => NewState#state.board,
+   %    <<"turn">> => NewState#state.current_player,
+   %    <<"status">> => NewState#state.status
+   %},
+    {reply, {ok, NewState}, NewState};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.

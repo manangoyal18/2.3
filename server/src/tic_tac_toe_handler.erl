@@ -3,7 +3,7 @@
 
 -export([init/2]).
 -export([websocket_init/1, websocket_handle/2, websocket_info/2, terminate/3]).
-
+-export([handle_command/2]).
 -include_lib("kernel/include/logger.hrl").
 
 init(Req, State) ->
@@ -14,24 +14,33 @@ websocket_init(State0) ->
     ?LOG_INFO("Client connected via WebSocket"),
   %  {ok, State0},
     {ok, Pid} = tic_tac_toe_game:start(),
-    GameIdStr = erlang:pid_to_list(Pid),
-    GameIdBin = list_to_binary(GameIdStr),
+
+    GameId = make_id(),
+
+
+    %GameIdStr = erlang:pid_to_list(Pid),
+    %GameIdBin = list_to_binary(GameIdStr),
     
     %ok = game_registry:get_game_pid(GameIdStr),
 
-    ok = game_registry:register_game(GameIdStr, Pid),
+    ok = game_registry:register_game(GameId, Pid),
 
     %{ok, GameIdStr} = tic_tac_toe_game:start(),
     {ok, InitialState} = tic_tac_toe_game:get_state(Pid),
+
+    Response = (tic_tac_toe_game:state_to_map(InitialState))#{
+        <<"type">> => <<"game_state">>,
+        <<"game_id">> => list_to_binary(GameId)
+    },
     
-    Payload = jsx:encode(InitialState#{<<"game_id">> => GameIdBin}),
+    Payload = jsx:encode(Response),
 
     % Add the game id to the socket state if needed later
     %State1 = State0#{game_id => GameIdStr},
     
     State1 = case is_map(State0) of
-        true -> State0#{game_id => GameIdStr};
-        false -> #{game_id => GameIdStr}
+        true -> State0#{game_id => GameId};
+        false -> #{game_id => GameId}
     end,
 
     {reply, {text, Payload}, State1}.
@@ -60,14 +69,23 @@ websocket_init(State0) ->
 %    end;
 
 websocket_handle({text, Msg}, State) ->
-    Parsed = jsone:decode(Msg, [{object_format, map}]),
-    io:format("Parsed command: ~p~n", [Parsed]),
-    case handle_command(Parsed, State) of
-        {reply, Reply, NewState} ->
-            {reply, Reply, NewState};
-        Other ->
-            io:format("Unexpected handle_command result: ~p~n", [Other]),
-            {ok, State}
+    io:format("Received raw message: ~s~n", [Msg]),
+    try
+        Parsed = jsone:decode(Msg, [{object_format, map}]),
+        io:format("Parsed command: ~p~n", [Parsed]),
+        handle_command(Parsed, State)
+    catch
+        _:Reason ->
+            io:format("Failed to decode or handle message: ~p~n", [Reason]),
+            Error = jsone:encode(#{<<"error">> => <<"Invalid message format">>}),
+            {reply, {text, Error}, State}
+    
+    %case handle_command(Parsed, State) of
+    %    {reply, Reply, NewState} ->
+    %        {reply, Reply, NewState};
+    %    Other ->
+    %        io:format("Unexpected handle_command result: ~p~n", [Other]),
+    %        {ok, State}
     end;
 
 
@@ -116,15 +134,23 @@ handle_command(#{<<"type">> := <<"start_game">>}, State) ->
 %                        {reply, {text, InvalidPidResponse}, State}
 %    end;
 
-handle_command(#{<<"type">> := <<"make_move">>, <<"game_id">> := GameIdBin,
-                 <<"player">> := Player, <<"row">> := Row, <<"col">> := Col}, State) ->
-    GameIdStr = binary_to_list(GameIdBin),
-    case game_registry:get_game_pid(GameIdStr) of
+handle_command(#{<<"type">> := <<"make_move">>, 
+                 <<"game_id">> := GameIdBin,
+                 <<"player">> := Player,
+                 <<"row">> := Row,
+                 <<"col">> := Col}, State) ->
+
+    GameId = binary_to_list(GameIdBin),
+
+    case game_registry:get_game_pid(GameId) of
         {ok, GamePid} ->
             case tic_tac_toe_game:make_move(GamePid, Player, #{row => Row, col => Col}) of
                 {ok, GameState} ->
-                    Response = jsone:encode(tic_tac_toe_game:state_to_map(GameState)),
-                    {reply, {text, Response}, State};
+                      Response = (tic_tac_toe_game:state_to_map(GameState))#{
+                        <<"type">> => <<"game_state">>,
+                        <<"game_id">> => GameIdBin
+                    },
+                    {reply, {text, jsone:encode(Response)}, State};
                 {error, Reason} ->
                     Error = jsone:encode(#{<<"error">> => Reason}),
                     {reply, {text, Error}, State}
@@ -134,27 +160,42 @@ handle_command(#{<<"type">> := <<"make_move">>, <<"game_id">> := GameIdBin,
             {reply, {text, Error}, State}
     end;
 
-
-handle_command(#{<<"type">> := <<"game_state">>, <<"game_id">> := GameId}, State) ->
-    case tic_tac_toe_game:get_state(binary_to_list(GameId)) of
+handle_command(#{<<"type">> := <<"game_state">>, <<"game_id">> := GameIdBin}, State) ->
+    GameId = binary_to_list(GameIdBin),
+    case tic_tac_toe_game:get_state(GameId) of
         {ok, GameState} ->
-            Response = jsone:encode(tic_tac_toe_game:state_to_map(GameState)),
-            {reply, {text, Response}, State};
+            Response = (tic_tac_toe_game:state_to_map(GameState))#{
+                <<"type">> => <<"game_state">>,
+                <<"game_id">> => GameIdBin
+            },
+            {reply, {text, jsone:encode(Response)}, State};
         {error, Reason} ->
             Error = jsone:encode(#{<<"error">> => Reason}),
             {reply, {text, Error}, State}
     end;
 
-handle_command(#{<<"type">> := <<"reset_game">>, <<"game_id">> := GameId}, State) ->
-    case tic_tac_toe_game:reset(binary_to_list(GameId)) of
+handle_command(#{<<"type">> := <<"reset_game">>, <<"game_id">> := GameIdBin}, State) ->
+    GameId = binary_to_list(GameIdBin),
+    case tic_tac_toe_game:reset(GameId) of
         {ok, GameState} ->
-            Response = jsone:encode(tic_tac_toe_game:state_to_map(GameState)),
-            {reply, {text, Response}, State};
+            Response = (tic_tac_toe_game:state_to_map(GameState))#{
+                <<"type">> => <<"game_state">>,
+                <<"game_id">> => GameIdBin
+            },
+            {reply, {text, jsone:encode(Response)}, State};
         {error, Reason} ->
             Error = jsone:encode(#{<<"error">> => Reason}),
             {reply, {text, Error}, State}
     end;
+
 
 handle_command(_, State) ->
     Error = jsone:encode(#{<<"error">> => <<"Unknown command">>}),
     {reply, {text, Error}, State}.
+
+%% Generate a fallback unique ID (no deps)
+make_id() ->
+    Now = erlang:monotonic_time(),
+    Unique = erlang:unique_integer([monotonic, positive]),
+    integer_to_list(Now) ++ "-" ++ integer_to_list(Unique).
+
