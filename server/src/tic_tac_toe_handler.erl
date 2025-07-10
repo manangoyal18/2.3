@@ -8,7 +8,7 @@
 
 init(Req, State) ->
     {cowboy_websocket, Req, State,
-    #{idle_timeout => 600000}}.
+    #{idle_timeout => 600000}}.   
 
 websocket_init(State0) ->
     ?LOG_INFO("Client connected via WebSocket"),
