@@ -17,6 +17,7 @@ export default function OnlineGame() {
     socketRef.current.onopen = () => {
       console.log('Connected to server');
       setConnected(true);
+      socketRef.current.send(JSON.stringify({ type: 'start_game' })); 
     };
 
     socketRef.current.onmessage = (message) => {

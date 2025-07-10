@@ -11,13 +11,5 @@ init([]) ->
     SupFlags = #{strategy => one_for_one,
                  intensity => 1,
                  period => 5},
-    ChildSpecs = [
-    #{id => game_registry,
-      start => {game_registry, start_link, []},
-      restart => permanent,
-      shutdown => 5000,
-      type => worker,
-      modules => [game_registry]}
-],
-
+    ChildSpecs = [],
     {ok, {SupFlags, ChildSpecs}}.
