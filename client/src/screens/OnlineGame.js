@@ -9,7 +9,7 @@ export default function OnlineGame() {
   const [playerSymbol, setPlayerSymbol] = useState(null);
   const [connected, setConnected] = useState(false);
   const [gameId, setGameId] = useState(null);
-  const socketRef = useRef(null);
+  const socketRef = useRef(null);   
 
   useEffect(() => {
     socketRef.current = new WebSocket('ws://172.0.10.38:8088/websocket');
