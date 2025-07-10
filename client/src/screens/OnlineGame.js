@@ -3,18 +3,16 @@ import { View, Text, Alert, StyleSheet, ImageBackground } from 'react-native';
 import bg from '../../assets/bg.jpeg';
 import Cell from '../components/Cell';
 
-const emptyBoard = [["", "", ""], ["", "", ""], ["", "", ""]];
-
 export default function OnlineGame() {
   const [map, setMap] = useState([["", "", ""], ["", "", ""], ["", "", ""]]);
   const [currentTurn, setCurrentTurn] = useState("x");
-  const [playerSymbol, setPlayerSymbol] = useState(null); // "x" or "o"
+  const [playerSymbol, setPlayerSymbol] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [gameId, setGameId] = useState(null);
   const socketRef = useRef(null);
 
   useEffect(() => {
-    // Connect to Erlang WebSocket server
-    socketRef.current = new WebSocket('ws://172.0.10.38:8080/websocket');
+    socketRef.current = new WebSocket('ws://172.0.10.38:8088/websocket');
 
     socketRef.current.onopen = () => {
       console.log('Connected to server');
@@ -27,15 +25,23 @@ export default function OnlineGame() {
 
       switch (data.type) {
         case 'assign_symbol':
-          setPlayerSymbol(data.symbol);
+          setPlayerSymbol(data.symbol); // "x" or "o"
           break;
+
         case 'game_state':
           setMap(data.board);
-          setCurrentTurn(data.turn);
+          setCurrentTurn(data.current_player);
+          setGameId(data.game_id);
+
+          if (!playerSymbol && data.your_symbol) {
+            setPlayerSymbol(data.your_symbol);
+          }
           break;
+
         case 'game_result':
           Alert.alert("Game Over", data.result, [{ text: "OK", onPress: resetGame }]);
           break;
+
         default:
           console.warn("Unknown message type:", data.type);
       }
@@ -58,6 +64,7 @@ export default function OnlineGame() {
   const resetGame = () => {
     setMap([["", "", ""], ["", "", ""], ["", "", ""]]);
     setCurrentTurn("x");
+    setGameId(null);
     socketRef.current?.send(JSON.stringify({ type: 'reset' }));
   };
 
@@ -65,19 +72,21 @@ export default function OnlineGame() {
     if (!playerSymbol) return;
     if (map[rowIndex][columnIndex] !== "") return;
     if (currentTurn !== playerSymbol) return;
+    if (!gameId) return;
 
     const payload = {
-      type: "move",
+      type: "make_move",
+      game_id: gameId,
+      player: playerSymbol,
       row: rowIndex,
       col: columnIndex,
-      symbol: playerSymbol,
     };
 
     console.log("Sending move:", payload);
     socketRef.current.send(JSON.stringify(payload));
   };
 
-  if (!connected || !playerSymbol) {
+  if (!connected || !playerSymbol || !gameId) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Connecting to server...</Text>
@@ -88,8 +97,8 @@ export default function OnlineGame() {
   return (
     <View style={styles.container}>
       <ImageBackground source={bg} style={styles.bg} resizeMode="contain">
-        <Text style={styles.turnText}>You are: {playerSymbol?.toUpperCase()}</Text>
-        <Text style={styles.turnText2}>Current Turn: {currentTurn?.toUpperCase()}</Text>
+        <Text style={styles.turnText}>You are: {playerSymbol.toUpperCase()}</Text>
+        <Text style={styles.turnText2}>Current Turn: {currentTurn.toUpperCase()}</Text>
         <View style={styles.map}>
           {map.map((row, rIdx) => (
             <View key={rIdx} style={styles.row}>

@@ -8,7 +8,9 @@
 -export([
     register_game/2,
     get_game_pid/1,
-    unregister_game/1
+    unregister_game/1,
+    add_player/2,
+    get_players/1
 ]).
 
 -define(TABLE, game_registry).
@@ -23,7 +25,7 @@ init([]) ->
 
 %% Register game by ID
 register_game(GameId, Pid) ->
-    ets:insert(game_registry, {GameId, Pid}),
+    ets:insert(game_registry, {GameId, Pid, []}),
     ok.
 
 %% Lookup
@@ -35,9 +37,30 @@ register_game(GameId, Pid) ->
 
 get_game_pid(GameId) ->
     case ets:lookup(game_registry, GameId) of
-        [{_, Pid}] -> {ok, Pid};
+        [{_, GamePid, _}] -> {ok, GamePid};
         [] -> {error, not_found}
     end.
+
+add_player(GameId, PlayerPid) ->
+    case ets:lookup(game_registry, GameId) of
+        [{GameId, GamePid, Players}] ->
+            NewPlayers = lists:usort([PlayerPid | Players]),
+            ets:insert(game_registry, {GameId, GamePid, NewPlayers}),
+            ok;
+        [] ->
+            {error, not_found}
+    end.
+
+
+get_players(GameId) ->
+    case ets:lookup(game_registry, GameId) of
+        [{_, _, Players}] ->
+            Players;
+        [] ->
+            []
+    end.
+
+
 %get_game_pid(_) -> {error, invalid_game_id}.
 
 %% Unregister
