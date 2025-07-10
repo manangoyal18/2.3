@@ -5,6 +5,7 @@
 -export([websocket_init/1, websocket_handle/2, websocket_info/2, terminate/3]).
 -export([handle_command/2]).
 -include_lib("kernel/include/logger.hrl").
+-include("tic_tac_toe_game.hrl").
 
 init(Req, State) ->
     {cowboy_websocket, Req, State,
@@ -85,21 +86,51 @@ websocket_handle({text, Msg}, State) ->
 websocket_handle(_Data, State) ->
     {ok, State}.
 
-websocket_info({start_game, GameId, Symbol}, State) ->
-    ?LOG_INFO("Matched into game: ~p with symbol ~p", [GameId, Symbol]),
-    {ok, GamePid} = game_registry:get_game_pid(GameId),
-    {ok, InitialState} = tic_tac_toe_game:get_state(GamePid),
-    Response = (tic_tac_toe_game:state_to_map(InitialState))#{
-        <<"type">> => <<"game_state">>,
+%websocket_info({start_game, GameId, Symbol, ready}, State) ->
+%    {ok, GameState} = tic_tac_toe_game:get_state(GameId),
+%    Payload = jsx:encode(GameState#{
+%        <<"type">> => <<"game_state">>,
+%        <<"game_id">> => list_to_binary(GameId),
+%        <<"your_symbol">> => Symbol,
+%        <<"waiting">> => false
+%    }),
+%    {[], State#{game_id => GameId, symbol => Symbol}, [{text, Payload}]};
+%
+%websocket_info({start_game, GameId, Symbol, waiting}, State) ->
+%    {ok, GameState} = tic_tac_toe_game:get_state(GameId),
+%    Payload = jsx:encode(GameState#{
+%        <<"type">> => <<"game_state">>,
+%        <<"game_id">> => list_to_binary(GameId),
+%        <<"your_symbol">> => Symbol,
+%        <<"current_player">> => <<"x">>,
+%        <<"waiting">> => true
+%    }),
+%    {[], State#{game_id => GameId, symbol => Symbol}, [{text, Payload}]};
+
+websocket_info({start_game, GameId, Symbol, waiting}, State) ->
+    send_full_game_state(GameId, Symbol, self()),
+    {[], State#{game_id => GameId, symbol => Symbol}, []};
+
+websocket_info({start_game, GameId, Symbol, ready}, State) ->
+    send_full_game_state(GameId, Symbol, self()),
+    {[], State#{game_id => GameId, symbol => Symbol}, []};
+
+
+websocket_info({player2_joined}, State) ->
+    Msg = jsx:encode(#{type => <<"player2_joined">>, message => <<"Second player connected. You can continue.">>}),
+    {[], State, [{text, Msg}]};
+
+websocket_info({game_timeout, GameId}, State) ->
+    Msg = jsx:encode(#{
+        type => <<"game_timeout">>,
         <<"game_id">> => list_to_binary(GameId),
-        <<"your_symbol">> => Symbol
-    },
-    Payload = jsx:encode(Response),
-    State1 = maps:merge(State, #{game_id => GameId}),
-    {reply, {text, Payload}, State1};
+        message => <<"Game cancelled. No second player joined.">>
+    }),
+    {[], State, [{text, Msg}]};
 
 
 websocket_info({send, Payload}, State) ->
+    io:format("Sending to client: ~s~n", [Payload]),
     {reply, {text, Payload}, State};
 
 websocket_info(_Info, State) ->
@@ -216,3 +247,22 @@ broadcast_game_state(GameId, GameState) ->
     Pids = game_registry:get_players(GameId),
     [Pid ! {send, Payload} || Pid <- Pids],
     ok.
+
+send_full_game_state(GameId, Symbol, SocketPid) ->
+    case tic_tac_toe_game:get_state(GameId) of
+        {ok, State} ->
+            Payload = jsx:encode(#{
+                <<"type">> => <<"game_state">>,
+                <<"status">> => State#state.status,
+                <<"board">> => State#state.board,
+                <<"current_player">> => State#state.current_player,
+                <<"winner">> => case State#state.winner of undefined -> <<"undefined">>; W -> W end,
+                <<"game_id">> => list_to_binary(GameId),
+                <<"your_symbol">> => Symbol
+            }),
+            SocketPid ! {send, Payload},
+            ok;
+        Error ->
+            Error
+    end.
+

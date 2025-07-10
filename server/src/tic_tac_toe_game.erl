@@ -4,16 +4,19 @@
 -export([start/0, make_move/3, get_state/1, reset/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([state_to_map/1]).
--record(state, {
-    board,
-    current_player,
-    status,
-    winner
-}).
+
+-include("tic_tac_toe_game.hrl").
+
+%-record(state, {
+%    board,
+%    current_player,
+%    status,
+%    winner
+%}).
 
 %% Public API
 start() ->
-    {ok, Pid} = gen_server:start(?MODULE, [], []).
+    {ok, _Pid} = gen_server:start(?MODULE, [], []).
    %GameIdStr = erlang:pid_to_list(Pid),
    %ok = game_registry:register_game(GameIdStr, Pid),
    %%{ok, erlang:pid_to_list(Pid)}.

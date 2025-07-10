@@ -20,8 +20,24 @@ export default function OnlineGame() {
     };
 
     socketRef.current.onmessage = (message) => {
-      const data = JSON.parse(message.data);
-      console.log("Received from server:", JSON.stringify(data, null, 2));
+      console.log("Raw message from server:", message.data);
+      let data;
+      try {
+       data = JSON.parse(message.data);
+      console.log("Parsed:", data);
+      //console.log("Received from server:", data);
+      } catch(e){
+        console.error("Failed to parse message", e);
+        return;  
+      }
+
+      /*   if (data.type === 'game_state') {
+        setMap(data.board || map);
+        setCurrentTurn(data.current_player || currentTurn);
+        if (data.game_id) setGameId(data.game_id);
+        if (data.your_symbol) setPlayerSymbol(data.your_symbol);
+        setConnected(true);  // Mark as fully connected when game state arrives
+    }.  */
 
       switch (data.type) {
         case 'assign_symbol':
@@ -33,9 +49,11 @@ export default function OnlineGame() {
           setCurrentTurn(data.current_player);
           setGameId(data.game_id);
 
-          if (!playerSymbol && data.your_symbol) {
-            setPlayerSymbol(data.your_symbol);
+          if (!playerSymbol && (data.your_symbol || data.symbol)) {
+            console.log("Assigned Symbol:", data.your_symbol);
+            setPlayerSymbol(data.your_symbol || data.symbol);
           }
+          setConnected(true);
           break;
 
         case 'game_result':
@@ -86,10 +104,12 @@ export default function OnlineGame() {
     socketRef.current.send(JSON.stringify(payload));
   };
 
-  if (!connected || !playerSymbol || !gameId) {
+  if (!connected || playerSymbol === null || !gameId) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Connecting to server...</Text>
+        <Text style={styles.loadingText}>
+          {connected ? 'Waiting for game to start...' : 'Connecting to server...'}
+          </Text>
       </View>
     );
   }
